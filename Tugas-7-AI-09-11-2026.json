@@ -1,0 +1,239 @@
+{
+  "name": "Tugas-7-AI-09-11-2026",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Form Rekrutmen Posisi Automation Engineer",
+        "formDescription": "Harap isi form dibawah ini sesuai dengan ketentuan yang berlaku.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Nama Lengkap",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Pengalaman",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "< 1 tahun"
+                  },
+                  {
+                    "option": "1 - 3 tahun"
+                  },
+                  {
+                    "option": ">3 tahun"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Upload PDF",
+              "fieldType": "file",
+              "acceptFileTypes": "pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "068e5f09-928d-4b58-bd6a-c1ce9f1759a4",
+      "name": "On form submission",
+      "webhookId": "acf3e6a8-6ec9-42ce-b297-ba77821e3136"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfor (let item of items) {\n  const binaryData = item.binary?.Upload_CV_PDF_;\n\n  if (binaryData) {\n    item.json.cv_base64 = binaryData.data; // Data base64\n    item.json.fileName = binaryData.fileName;\n  }\n\n  // Tambahkan timestamp lokal (WIB)\n  item.json.tanggal_input = DateTime.now().toFormat('dd-MM-yyyy HH:mm');\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "20658995-4e41-4d4b-a533-cb1fba9ff345",
+      "name": "MANIPULASI BINARY & TIMESTAMP"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "Upload_PDF",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "112b4b77-0182-4819-8431-c4e0c6dd7dc4",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Peran: Anda adalah Senior Technical Recruiter yang sangat teliti dan objektif. Tugas Anda adalah mengevaluasi teks CV kandidat di bawah ini untuk posisi Automation Engineer/Developer.\n\nTeks CV Kandidat:\n{{ $json.text }}\n\nFormat Output (WAJIB JSON):\nJangan berikan basa-basi atau teks pembuka. HANYA berikan output JSON valid dengan struktur berikut:\n{\n  \"candidate_name\": \"Nama lengkap kandidat (jika ada)\",\n  \"years_of_experience\": \"Jumlah tahun pengalaman (angka)\",\n  \"top_skills\": [\"Skill 1\", \"Skill 2\", \"Skill 3\"],\n  \"summary\": \"Ringkasan profil kandidat dalam 2 kalimat\",\n  \"score\": 85,\n  \"hiring_recommendation\": \"Highly Recommended / Recommended / Not Recommended\"\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        672,
+        0
+      ],
+      "id": "6db54f22-3648-436c-8d8e-36b76d97402a",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        192
+      ],
+      "id": "29846d1f-88f2-4de0-9324-4292228b8f1d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "xDzOY54B7DJQRlnh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfor (let item of items) {\n  const aiResponseText = item.json.text;\n\n  try {\n    // Ekstrak JSON dari teks AI (antisipasi markdown ```json)\n    const jsonMatch = aiResponseText.match(/\\{[\\s\\S]*\\}/);\n    if (!jsonMatch) throw new Error(\"Tidak ada JSON ditemukan\");\n    \n    const parsedData = JSON.parse(jsonMatch[0]);\n\n    // Masukkan ke item.json agar bisa dipanggil node selanjutnya\n    item.json.ai_name = parsedData.candidate_name;\n    item.json.ai_exp = parsedData.years_of_experience;\n    item.json.ai_skills = parsedData.top_skills.join(', '); // Array jadi string\n    item.json.ai_summary = parsedData.summary;\n    item.json.ai_score = parsedData.score;\n    item.json.ai_rec = parsedData.hiring_recommendation;\n\n  } catch (error) {\n    // Fallback jika AI gagal generate JSON valid\n    item.json.error = \"Gagal parsing JSON dari AI\";\n    item.json.raw_output = aiResponseText;\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "09f8b03e-eda0-4617-87ff-ed77645aafc8",
+      "name": "PARSING JSON & ERROR HANDLING"
+    },
+    {
+      "parameters": {
+        "chatId": "8349128220",
+        "text": "=Nama: {{ $json.ai_name }} Skills: {{ $json.ai_skills }} Score: {{ $json.ai_score }} Summary: {{ $json.ai_summary }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "f24a9241-61ad-492b-a7c0-e4a797b8d261",
+      "name": "KIRIM KE TELEGRAM",
+      "webhookId": "45a20d11-d17c-4a5b-88a7-7142d0302505",
+      "credentials": {
+        "telegramApi": {
+          "id": "7oaVE8pb0zveUfmo",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "MANIPULASI BINARY & TIMESTAMP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MANIPULASI BINARY & TIMESTAMP": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "PARSING JSON & ERROR HANDLING",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARSING JSON & ERROR HANDLING": {
+      "main": [
+        [
+          {
+            "node": "KIRIM KE TELEGRAM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c04bc9ff-5caa-49b3-a2c2-c04830772833",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "24a27c4d7585089fe72776367fdbd31b7bb92fa9ba4a452d13f680ea8edeb738"
+  },
+  "nodeGroups": [],
+  "id": "zroPIr90Qrd3jXMb",
+  "tags": []
+}
